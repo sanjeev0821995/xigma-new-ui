@@ -51,7 +51,7 @@ export default function HomePage() {
                   href={service.href}
                   className="mt-2 inline-block text-sm font-semibold text-cyan-200 hover:text-cyan-100"
                 >
-                  Explore service ->
+                  Explore service {"->"}
                 </Link>
               </div>
             ))}
@@ -68,7 +68,9 @@ export default function HomePage() {
           <div className="grid gap-5 md:grid-cols-3">
             {testimonials.map((testimonial) => (
               <article key={testimonial.name} className="glass card-hover rounded-2xl p-6">
-                <p className="text-sm leading-7 text-indigo-100/90">"{testimonial.quote}"</p>
+                <p className="text-sm leading-7 text-indigo-100/90">
+                  {`"${testimonial.quote}"`}
+                </p>
                 <div className="mt-5">
                   <p className="font-semibold text-white">{testimonial.name}</p>
                   <p className="text-sm text-indigo-100/80">
