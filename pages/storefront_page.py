@@ -1,6 +1,10 @@
 from urllib.parse import quote_plus
 
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    ElementNotInteractableException,
+    TimeoutException,
+)
 from selenium.webdriver.common.by import By
 
 from pages.base_page import BasePage
@@ -26,11 +30,13 @@ class StorefrontPage(BasePage):
     # Product details/cart selectors
     PRODUCT_PAGE_TITLE = (By.CSS_SELECTOR, "h1, .product__title")
     ADD_TO_CART_BUTTON = (
-        By.XPATH,
-        "//button[contains(translate(normalize-space(.),"
-        "'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'add to cart')]",
+        By.CSS_SELECTOR,
+        "button.add-to-cart-button, button[name='add'], form[action*='/cart/add'] button[type='submit']",
     )
-    CART_LINK = (By.CSS_SELECTOR, "a[href*='/cart'], .header__icon--cart")
+    CART_LINK = (
+        By.CSS_SELECTOR,
+        "a[href*='/cart'], button.header-actions__action, .header__icon--cart",
+    )
     CART_QTY_INPUT = (By.CSS_SELECTOR, "input[name='updates[]'], input[name='quantity']")
     CART_ITEM_LINK = (By.CSS_SELECTOR, "a[href*='/products/']")
 
@@ -71,22 +77,47 @@ class StorefrontPage(BasePage):
         )
 
     def open_product_from_results(self, product_name: str) -> None:
-        # Open the first matching product link.
+        # Open the first matching product link using robust navigation:
+        # 1) try matching text link
+        # 2) fallback to first results link
+        # 3) navigate directly via href to avoid click interception overlays
+        target_element = None
         matches = self.driver.find_elements(By.PARTIAL_LINK_TEXT, product_name)
         if matches:
-            matches[0].click()
+            target_element = matches[0]
         else:
-            # Fallback: first product link in results
-            self.wait_for_clickable(self.SEARCH_RESULT_TITLES).click()
+            target_element = self.wait_for_clickable(self.SEARCH_RESULT_TITLES)
+
+        href = target_element.get_attribute("href")
+        if href:
+            self.driver.get(href)
+        else:
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", target_element)
+            target_element.click()
         self.wait_for_visible(self.PRODUCT_PAGE_TITLE)
 
     def add_current_product_to_cart(self) -> None:
-        self.wait_for_clickable(self.ADD_TO_CART_BUTTON).click()
+        button = self.wait.until(lambda d: self._first_displayed_element(self.ADD_TO_CART_BUTTON))
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+        try:
+            button.click()
+        except (TimeoutException, ElementClickInterceptedException, ElementNotInteractableException):
+            # Some themes keep overlays over CTA; JavaScript click is a stable fallback.
+            self.driver.execute_script("arguments[0].click();", button)
         # Wait for cart link to be available; some themes use drawer/cart count updates.
         self.wait.until(lambda d: self._is_present(self.CART_LINK))
 
     def open_cart(self) -> None:
-        self.wait_for_clickable(self.CART_LINK).click()
+        cart_trigger = self.wait.until(lambda d: self._first_displayed_element(self.CART_LINK))
+        try:
+            cart_trigger.click()
+        except (TimeoutException, ElementClickInterceptedException, ElementNotInteractableException):
+            href = cart_trigger.get_attribute("href")
+            if href:
+                self.driver.get(href)
+            else:
+                base = self.driver.current_url.split("/products/")[0].split("/search")[0].rstrip("/")
+                self.driver.get(f"{base}/cart")
         self.wait.until(lambda d: self._is_present(self.CART_QTY_INPUT) or self._is_present(self.CART_ITEM_LINK))
 
     def cart_contains_product(self, product_name: str) -> bool:
@@ -104,3 +135,10 @@ class StorefrontPage(BasePage):
 
     def _is_present(self, locator) -> bool:
         return len(self.driver.find_elements(*locator)) > 0
+
+    def _first_displayed_element(self, locator):
+        elements = self.driver.find_elements(*locator)
+        for element in elements:
+            if element.is_displayed() and element.is_enabled():
+                return element
+        return None

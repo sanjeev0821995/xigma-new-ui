@@ -1,0 +1,10 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /workspace
+collecting ... collected 1 item
+
+tests/test_search_and_add_to_cart.py::test_search_and_add_product_to_cart_success PASSED [100%]
+
+----------- generated xml file: /workspace/reports/pytest-report.xml -----------
+============================== 1 passed in 42.82s ==============================
